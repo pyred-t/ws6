@@ -106,7 +106,9 @@ def start_p1(workspace:str):
     subprocess.run(['git', 'clone', '-b' , branch, httpurl, tmpdir.name], check=True)
     # ls -a src_dir | grep -v '^\.\.$' | grep -v '^\.$' | xargs -I {} cp -r src_dir/{} dst_dir/
     # subprocess.run(f'ls -a {tmpdir.name} | grep -v "^\\.$" | grep -v "^\\.\\.$" | xargs -I {{}} mv -f {tmpdir.name}/{{}} {ws}', shell=True, check=True)
-    subprocess.run(f'mv -f {tmpdir.name}/* {ws}', shell=True, check=True)
+    # shopt -s dotglob  && mv tmp/* dst/ && shopt -u dotglob
+    subprocess.run(f'shopt -s dotglob  && mv {tmpdir.name}/* {ws} && shopt -u dotglob', shell=True, check=True)
+    # subprocess.run(f'mv -f {tmpdir.name}/* {ws}', shell=True, check=True)
     
     
     # subprocess.run(['git', 'apply', 'patch.diff'], cwd=ws)
