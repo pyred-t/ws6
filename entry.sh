@@ -37,6 +37,7 @@ function rebase() {
 
 function start() {
     # TODO: unset global git config
+    # p1: check or create workspace, clone git repo, apply patch
     $_WS6_PY start_p1 $1
 
     # p2: activate/create conda env (conda name forced to be same as workspace name) and update environemt by env.yml
@@ -58,6 +59,8 @@ function start() {
 }
 
 
+# $1 is the workspace name, 
+# and $2 (if provided, “1”, “true”, “t”, “yes”, “y”) indicates do all finish steps including delete git repo metadata
 function finish() {
     $_WS6_PY validate-workspace $1
     if [ $? -ne 0 ]; then
@@ -69,9 +72,18 @@ function finish() {
     conda export -n $1 --no-builds -f $_WS_ROOT/$1/env.yml
     [ $? -ne 0 ] && echo -e "\e[31m Error export conda env $1 \e[0m" && return 1
 
-    $_WS6_PY finish_p2 $1
+    # p2: git things
+    $_WS6_PY finish_p2 $1 $2
+    if [ $? -eq 2 ]; then
+        echo -e "\e[32m Successfully finished workspace without done-all $1 \e[0m"
+    fi
+    elif [ $? -ne 0 ]; then
+        echo -e "\e[31m Terminate finish workspace $1 \e[0m"
+        return 1
+    fi
     
     # p3: deactivate conda env or change to base
+    conda deactivate
 
     # p4: rebase workspace ros
     rebase $_ROS

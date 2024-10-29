@@ -124,23 +124,17 @@ def start_p1(workspace:str):
 
     pass
 
-
-def finish_p2(workspace:str, skip_push:bool=False):
+@main.command()
+@click.argument('workspace')
+@click.argument('done_all_yes', type=bool, default=False)
+def finish_p2(workspace:str, done_all_yes:bool=False):
     """
-    first process of the finish workflow: 
+    second process of the finish workflow: 
         extract the patch, commit the changes, and push to the remote repository
         clean the repository
     """
-    ws = pathlib.Path(configs['_WS_ROOT']).joinpath(workspace)
-    # check if the repo has uncommitted changes
-    result = subprocess.run(['git', 'status', '--porcelain'], cwd=ws, check=True, capture_output=True, text=True)
-    if not result.stdout.strip():
-        print(res.stdout)
-        logging.error(f'\033[31m {ws} has uncommitted changes. Please commit or stash your changes before proceeding. \033[0m'
-                    f'\033[31m Or try: git -C {ws} commit -am "autocommit message{datetime.datetime.now()}" \033[0m')
-        sys.exit(1)
-
     # traversal wpb_ws to find folder containing .git folder and check if there are uncommitted changes
+    ws = pathlib.Path(configs['_WS_ROOT']).joinpath(workspace)
     wpb_ws = pathlib.Path(configs['_WS_ROOT']).joinpath(configs['_WPB'])
     repo_pahts = []
     for root, dirs, files in os.walk(wpb_ws.joinpath('src')):
@@ -156,21 +150,49 @@ def finish_p2(workspace:str, skip_push:bool=False):
             repo_pahts.append(repo_path)
     # save the patch files
     for repo_path in repo_pahts:
+        diff_files = subprocess.run(['git', 'diff', '--name-only', 'origin/master'], cwd=repo_path, capture_output=True, text=True)
+        if not diff_files.stdout.strip():
+            logging.info(f'No changes in {repo_path}')
+            continue
+        elif diff_files.stderr:
+            logging.error(f'Error in {repo_path}: {diff_files.stderr}')
+            sys.exit(1)
+        
         rel_to_src = repo_path.relative_to(wpb_ws.joinpath('src'))
         patch_path = ws.joinpath('external', 'patches', rel_to_src)
+        diff_path = ws.joinpath('external', 'diffs_read_only', rel_to_src)
         patch_path.mkdir(parents=True, exist_ok=True)
+        diff_path.mkdir(parents=True, exist_ok=True)
+
+        for file in diff_files.stdout.splitlines():
+            shutil.copy(repo_path.joinpath(file), diff_path.joinpath(file))
+
         subprocess.run(
             ['git', 'format-patch', 'origin/master..HEAD', '--stdout'], 
             cwd=repo_path, check=True, stdout=patch_path.joinpath(configs['_PATCH_NAME']).open('w')
         )
+
     logging.info(f'Patch files are saved in {ws.joinpath("external", "patches")}')
     
-    if skip_push:
+    if not done_all_yes:
         logging.info('\033[33m Finish the repo workflow without pushing the changes \033[0m')
-        return
+        sys.exit(2)
+    
+    # Try auto commit the patch files, error msg redirect to null
+    subprocess.run(['git', 'add', 'external/patches/'], cwd=ws, stderr=subprocess.DEVNULL)
+    subprocess.run(['git', 'commit', '-m', f'Add patches for {workspace}'], cwd=ws, stderr=subprocess.DEVNULL)
+    
+    # check if the repo has uncommitted changes
+    result = subprocess.run(['git', 'status', '--porcelain'], cwd=ws, check=True, capture_output=True, text=True)
+    if not result.stdout.strip():
+        print(res.stdout)
+        logging.error(f'\033[31m {ws} has uncommitted changes. Please commit or stash your changes before proceeding. \033[0m'
+                    f'\033[31m Or try: git -C {ws} commit -am "autocommit message{datetime.datetime.now()}" \033[0m')
+        sys.exit(1)
 
     # push the changes
-    subprocess.run(['git', 'push'], cwd=ws, check=True)
+    # TODO: git push -u origin/{branch} local_branch
+    subprocess.run(['git', 'push'], cwd=ws, check=True, stderr=subprocess.STDOUT)
     logging.info(f'\033[34m Changes are pushed to the remote repository \033[0m')
     # rm .git folder
     subprocess.run(['rm', '-rf', ws.joinpath('.git')], check=True)
@@ -179,9 +201,9 @@ def finish_p2(workspace:str, skip_push:bool=False):
     for repo_path in repo_pahts:
         # get git branch name
         result = subprocess.run(['git', 'branch', '--show-current'], cwd=repo_path, check=True, capture_output=True, text=True)
-        subprocess.run(['git', 'checkout', 'master'], cwd=repo_path, check=True)
-        subprocess.run(['git', 'reset', '--hard', 'origin/master'], cwd=repo_path, check=True)
-        subprocess.run(['git', 'branch', '-D', result.stdout.strip()], cwd=repo_path, check=True)
+        subprocess.run(['git', 'checkout', 'master'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
+        subprocess.run(['git', 'reset', '--hard', 'origin/master'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
+        subprocess.run(['git', 'branch', '-D', result.stdout.strip()], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
         logging.info(f'Reset the repository {repo_path}')
     logging.info(f'\033[32m Reset the repositories in {configs["_WPB"]} \033[0m')
 

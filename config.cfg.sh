@@ -7,8 +7,10 @@ _SOURCE_LIST="$_CACHE_DIR/source.list.sh"
 _WS_ROOT="/home/$(whoami)/ws"
 _ROS="noetic"
 _WPB="wpb_ws"
-_PATCH_NAME="all_commits.patch"
 
 # Python configuration
-_REQUIRED_PYTHON_PACKAGES="catkin-tools rosdep empy"
+_REQUIRED_PYTHON_PACKAGES="catkin-tools rosdep empy click"
 _DEFAULT_PYTHON_VERSION="3.8"
+
+# Git configuration
+_PATCH_NAME="all_commits.patch"
