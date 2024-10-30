@@ -69,16 +69,16 @@ function finish() {
     fi
 
     # p1: prepare conda env.yml
+    echo -e "Exporting conda env $1 to $_WS_ROOT/$1/env.yml"
     conda export -n $1 --no-builds -f $_WS_ROOT/$1/env.yml
     [ $? -ne 0 ] && echo -e "\e[31m Error export conda env $1 \e[0m" && return 1
 
     # p2: git things
-    $_WS6_PY finish_p2 $1 $2
+    $_WS6_PY finish-p2 $1 $2
     if [ $? -eq 2 ]; then
         echo -e "\e[32m Successfully finished workspace without done-all $1 \e[0m"
-    fi
     elif [ $? -ne 0 ]; then
-        echo -e "\e[31m Terminate finish workspace $1 \e[0m"
+        echo -e "\e[31m Terminate work on finishing workspace $1 \e[0m"
         return 1
     fi
     
@@ -109,13 +109,13 @@ function delete() {
 function main() {
     case $1 in
         "rebase")
-            rebase $2
+            rebase $2 $3
             ;;
         "start")
             start $2
             ;;
         "finish")
-            finish $2
+            finish $2 $3
             ;;
         "delete")
             delete $2
