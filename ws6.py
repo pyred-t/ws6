@@ -48,7 +48,7 @@ def _sourcebash_path(workspace:str) -> str:
     return f'{configs["_WS_ROOT"]}/{workspace}/devel/setup.bash'
 
 def _gen_branch_name(workspace:str) -> str:
-    return f'{workspace}_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}'
+    return f'{configs["_DEVELOPMENT"]}_{workspace}_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}'
 
 
 @click.group()
@@ -146,14 +146,17 @@ def start_p1(workspace:str):
         logging.info(f'Patch applied to {repo_path}')
     
     # create a new branch
-    for repo_path in wpb_repo_paths:
+    try:
+        for repo_path in wpb_repo_paths:
+            branch_name = _gen_branch_name(workspace)
+            subprocess.run(['git', 'checkout', '-b', branch_name], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
+            logging.info(f'Created a new branch {branch_name} in {repo_path}')
+        
         branch_name = _gen_branch_name(workspace)
-        subprocess.run(['git', 'checkout', '-b', branch_name], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
-        logging.info(f'Created a new branch {branch_name} in {repo_path}')
-    
-    branch_name = _gen_branch_name(workspace)
-    subprocess.run(['git', 'checkout', '-b', branch_name], cwd=ws, check=True, stderr=subprocess.STDOUT)
-    logging.info(f'Created a new branch {branch_name} in {ws}')
+        subprocess.run(['git', 'checkout', '-b', branch_name], cwd=ws, check=True, stderr=subprocess.STDOUT)
+        logging.info(f'Created a new branch {branch_name} in {ws}')
+    except:
+        logging.error(f'\033[31m Error in creating a new branch, skip those \033[0m')
     
     logging.info(f'\033[32m Finish repo workflow.\033[0m \n '
                 '\t\033[33m You may check user.name and user.email in each repo or global. now\033[0m')

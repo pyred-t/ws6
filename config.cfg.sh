@@ -1,4 +1,5 @@
 # Tool Paths and directories
+_DEVELOPMENT="onboard"
 _WS6_PY="./ws6.py"
 _CACHE_DIR="."  # _CACHE_DIR="/var/cache/ws6"
 _SOURCE_LIST="$_CACHE_DIR/source.list.sh"

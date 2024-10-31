@@ -3,5 +3,6 @@ import pathlib
 import subprocess
 
 if __name__ == '__main__':
-    diff_files = subprocess.run(['git', 'diff', '--name-only', 'origin/main'], check=True, capture_output=True, text=True)
-    print(diff_files.stdout.splitlines())
+    # git config --uset --global user.name user.emali
+    subprocess.run(['git', 'config', '--unset', '--global', 'user.name'])
+    subprocess.run(['git', 'config', '--unset', '--global', 'user.email'])
