@@ -15,3 +15,9 @@ _DEFAULT_PYTHON_VERSION="3.8"
 
 # Git configuration
 _PATCH_NAME="all_commits.patch"
+
+# default master branch name is master
+# if you want to use main branch, use the following format
+# only use in wpb_ws now
+# _{REPONAME}_MASTER="main"
+# _{REPONAME}_REMOTE_MASTER="main"

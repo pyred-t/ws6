@@ -4,5 +4,6 @@ import subprocess
 
 if __name__ == '__main__':
     # git config --uset --global user.name user.emali
-    subprocess.run(['git', 'config', '--unset', '--global', 'user.name'])
-    subprocess.run(['git', 'config', '--unset', '--global', 'user.email'])
+    # dir_name = os.path.basename('/home/username/Downloads/test')
+    dir_name2 = pathlib.Path('/home/username/Downloads/test').name
+    print(dir_name2)

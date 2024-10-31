@@ -50,6 +50,30 @@ def _sourcebash_path(workspace:str) -> str:
 def _gen_branch_name(workspace:str) -> str:
     return f'{configs["_DEVELOPMENT"]}_{workspace}_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}'
 
+def _repo_master(repo_name:str) -> str:
+    return configs[f'_{repo_name}_MASTER'] if f'_{repo_name}_MASTER' in configs else 'master'
+
+def _repo_remote_master(repo_name:str) -> str:
+    return configs[f'_{repo_name}_REMOTE_MASTER'] if f'_{repo_name}_REMOTE_MASTER' in configs else 'master'
+
+# List[Pathlib.Path]
+def _reset_wpb(repo_paths:list = None):
+    subprocess.run(['git', 'config', '--unset', '--global', 'user.name'])
+    subprocess.run(['git', 'config', '--unset', '--global', 'user.email'])
+    repo_paths = [pathlib.Path(root) for root, dirs, _ in os.walk(wpb_ws.joinpath('src')) if '.git' in dirs] if repo_paths is None else repo_paths
+    for repo_path in repo_paths:
+        repo_name = repo_path.name
+        try:
+            result = subprocess.run(['git', 'branch', '--show-current'], cwd=repo_path, check=True, capture_output=True, text=True)
+            branch_name = result.stdout.strip()
+            subprocess.run(['git', 'checkout', f'{_repo_master(repo_name)}'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
+            subprocess.run(['git', 'reset', '--hard', f'origin/{_repo_remote_master(repo_name)}'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
+            subprocess.run(['git', 'branch', '-D', result.stdout], cwd=repo_path, check=True, stderr=subprocess.STDOUT) if branch_name != _repo_master(repo_name) else None
+            logging.info(f'Reset the repository {repo_path}')
+        except subprocess.CalledProcessError as e:
+            logging.error(f'\033[31m Error in reset {repo_path}: {e.stderr}, skip this repo \033[0m')
+    logging.info(f'\033[32m Reset the repositories in {configs["_WPB"]} \033[0m')
+
 
 @click.group()
 def main():
@@ -114,15 +138,7 @@ def start_p1(workspace:str):
     wpb_ws = pathlib.Path(configs['_WS_ROOT']).joinpath(configs['_WPB'])
 
     # try reset wpb_ws
-    wpb_repo_paths = [pathlib.Path(root) for root, dirs, _ in os.walk(wpb_ws.joinpath('src')) if '.git' in dirs]
-    for repo_path in wpb_repo_paths:
-        try:
-            subprocess.run(['git', 'checkout', 'master'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
-            subprocess.run(['git', 'reset', '--hard', 'origin/master'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            logging.error(f'\033[31m Error in {repo_path}: {e.stderr} \033[0m')
-            sys.exit(1)
-    logging.info(f'Reset the repositories in {configs["_WPB"]}')
+    _reset_wpb()
 
     
     httpurl = input('Please input the http(s)url of the repository: ')
@@ -224,35 +240,41 @@ def finish_p2(workspace:str, done_all_yes:bool=False):
     subprocess.run(['git', 'add', 'external/patches/'], cwd=ws, stderr=subprocess.DEVNULL)
     subprocess.run(['git', 'commit', '-m', f'Add patches for {workspace}'], cwd=ws, stderr=subprocess.DEVNULL)
     
-    check_uncommited_changes(ws)
-
     # push the changes
-
-    # get current branch name
+    check_uncommited_changes(ws)
     result = subprocess.run(['git', 'branch', '--show-current'], cwd=ws, check=True, capture_output=True, text=True)
     branch_name = result.stdout.strip()
-    # 
-
+    # git upstream name
+    upstream = subprocess.run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], cwd=ws, capture_output=True)
+    if upstream.returncode:
+        logging.warning(f'\033[33m Error in getting upstream branch: {upstream.stderr} \033[0m')
+        upstream = ''
+    else:
+        upstream = upstream.stdout.strip()
     
+    if upstream:
+        anystr = input(f'will push {branch_name} to {upstream}, input "yes" to continue, or input "no" to abort: ')
+        if anystr != 'yes' or anystr != 'y':
+            logging.info(f'\033[33m Finish the repo workflow without pushing the changes \033[0m')
+            sys.exit(2)
+        else:
+            subprocess.run(['git', 'push'], cwd=ws, check=True, stderr=subprocess.STDOUT)
+    else:
+        anystr = input(f'no upstream branch found, will push {branch_name} to origin, input "yes" to continue, or input "no" to abort: ')
+        if anystr != 'yes' or anystr != 'y':
+            logging.info(f'\033[33m Finish the repo workflow without pushing the changes \033[0m')
+            sys.exit(2)
+        else:
+            subprocess.run(['git', 'push', 'origin', branch_name], cwd=ws, check=True, stderr=subprocess.STDOUT)
     
-
-    
-
-
-    subprocess.run(['git', 'push'], cwd=ws, check=True, stderr=subprocess.STDOUT)
     logging.info(f'\033[34m Changes are pushed to the remote repository \033[0m')
+    logging.info(f'would clean the repository metainfo and reset the wpb_ws now')
 
     # rm .git folder
     subprocess.run(['rm', '-rf', ws.joinpath('.git')], check=True)
     logging.info(f'\033[32m Cleaned the repository metainfo \033[0m')
     # reset the wpb_ws
-    for repo_path in repo_pahts:
-        result = subprocess.run(['git', 'branch', '--show-current'], cwd=repo_path, check=True, capture_output=True, text=True)
-        subprocess.run(['git', 'checkout', 'master'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
-        subprocess.run(['git', 'reset', '--hard', 'origin/master'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
-        subprocess.run(['git', 'branch', '-D', result.stdout], cwd=repo_path, check=True, stderr=subprocess.STDOUT) if result.stdout != 'master' else None
-        logging.info(f'Reset the repository {repo_path}')
-    logging.info(f'\033[32m Reset the repositories in {configs["_WPB"]} \033[0m')
+    _reset_wpb(repo_paths)
 
     logging.info(f'\033[32m Finish repo workflow. You may delete {"{workspace}"}/src manually now. \033[0m')
 

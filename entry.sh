@@ -36,7 +36,6 @@ function rebase() {
 
 
 function start() {
-    # TODO: unset global git config
     # p1: check or create workspace, clone git repo, apply patch
     $_WS6_PY start_p1 $1
 
@@ -51,8 +50,10 @@ function start() {
         conda create -n $1 python=$python_version $_REQUIRED_PYTHON_PACKAGES
     fi
     [ $? -ne 0 ] && echo -e "\e[31m Error create conda env $1 \e[0m" && return 1
+    # conda env update by env.yml
     conda activate $1
-    # TODO: conda env update by env.yml
+    conda env update -n $1 -f $_WS_ROOT/$1/env.yml
+    [ $? -ne 0 ] && echo -e "\e[31m Error update conda env $1 \e[0m" && return 1
     
     # p3: force rebuild rebase
     rebase $1 force
@@ -90,20 +91,24 @@ function finish() {
 }
 
 
-function delete() {
-    ret = `$_WS6_PY check-workspace $1`
-    if [ -n $ret ]; then
-        echo "Error check workspace $1, err: $ret"
-        return 1
-    fi
+# function delete() {
+#     ret = `$_WS6_PY check-workspace $1`
+#     if [ -n $ret ]; then
+#         echo "Error check workspace $1, err: $ret"
+#         return 1
+#     fi
 
-    # p1: delete conda env
+#     # p1: delete conda env
+#     conda env remove -n $1
+#     [ $? -ne 0 ] && echo -e "\e[31m Error delete conda env $1 \e[0m" && return 1
 
-    # p2: delete workspace
+#     # p2: delete workspace
+#     rm -rf $_WS_ROOT/$1
+#     [ $? -ne 0 ] && echo -e "\e[31m Error delete workspace $1 \e[0m" && return 1
 
-    # p4: rebase workspace ros
-    rebase $_ROS
-}
+#     # p4: rebase workspace ros
+#     rebase $_ROS
+# }
 
 
 function main() {
