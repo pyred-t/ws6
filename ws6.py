@@ -227,7 +227,18 @@ def finish_p2(workspace:str, done_all_yes:bool=False):
     check_uncommited_changes(ws)
 
     # push the changes
-    # TODO: git push -u origin/{branch} local_branch
+
+    # get current branch name
+    result = subprocess.run(['git', 'branch', '--show-current'], cwd=ws, check=True, capture_output=True, text=True)
+    branch_name = result.stdout.strip()
+    # 
+
+    
+    
+
+    
+
+
     subprocess.run(['git', 'push'], cwd=ws, check=True, stderr=subprocess.STDOUT)
     logging.info(f'\033[34m Changes are pushed to the remote repository \033[0m')
 
