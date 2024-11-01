@@ -4,13 +4,17 @@ _WS6_PY="./ws6.py"
 _CACHE_DIR="."  # _CACHE_DIR="/var/cache/ws6"
 _SOURCE_LIST="$_CACHE_DIR/source.list.sh"
 
+# conda env
+_CURRENT_CONDA_ENV=$(conda info --envs | grep "*" | awk '{print $1}')
+
 # Workspace and ROS configuration
 _WS_ROOT="/home/$(whoami)/ws"
 _ROS="noetic"
 _WPB="wpb_ws"
 
 # Python configuration
-_REQUIRED_PYTHON_PACKAGES="catkin-tools rosdep empy click"
+_REQUIRED_PYTHON_PACKAGES_BY_CONDA="rosdep empy click"
+_REQUIRED_PYTHON_PACKAGES_BY_PIP="catkin-tools"
 _DEFAULT_PYTHON_VERSION="3.8"
 
 # Git configuration

@@ -36,14 +36,22 @@ function rebase() {
 
 # $1 is the workspace name
 function start() {
+    to_create=0
     $_WS6_PY validate-workspace $1
-    [ $? -ne 0 ] && echo "Error validate workspace $1" && return 1
-
-    rebase $_ROS    # must rebase ros first to enable catkin
+    if [ $? -ne 0 ] && [ $? -ne 11 ]; then
+        to_create=1
+    fi
     
     # p1: check or create workspace, clone git repo, apply patch
     $_WS6_PY start-p1 $1
-    [ $? -ne 0 ] && echo -e "\e[31m Error start workspace $1 \e[0m" && return 1
+    if [ $? -ne 0 ]; then
+        echo -e "\e[31m Error start workspace $1 \e[0m"
+        # if to_create, delete the workspace
+        if [ $to_create -eq 1 ]; then
+            rm -rf $_WS_ROOT/$1
+        fi
+        return 1
+    fi
 
     # p2: activate/create conda env (conda name forced to be same as workspace name) and update environemt by env.yml
     conda_env_list=`conda env list | awk '{print $1}'`
@@ -53,16 +61,24 @@ function start() {
         read -p "Enter the Python version for the conda environment (default is $_DEFAULT_PYTHON_VERSION): " python_version
         python_version=${python_version:-$_DEFAULT_PYTHON_VERSION}
         echo -e "\e[33m Creating new Conda environment $1 \e[0m"
-        conda create -n $1 python=$python_version $_REQUIRED_PYTHON_PACKAGES
+        conda create -n $1 python=$python_version $_REQUIRED_PYTHON_PACKAGES_BY_CONDA -y && conda activate $1
+        if [ -n "$_REQUIRED_PYTHON_PACKAGES_BY_PIP" ]; then
+            pip install $_REQUIRED_PYTHON_PACKAGES_BY_PIP
+        fi
     fi
     [ $? -ne 0 ] && echo -e "\e[31m Error create conda env $1 \e[0m" && return 1
     # conda env update by env.yml
     conda activate $1
-    conda env update -n $1 -f $_WS_ROOT/$1/env.yml
-    [ $? -ne 0 ] && echo -e "\e[31m Error update conda env $1 \e[0m" && return 1
+    [ -f $_WS_ROOT/$1/env.yml ] && conda env update -n $1 -f $_WS_ROOT/$1/env.yml
+    [ $? -ne 0 ] && echo -e "\e[31m Error update conda env $1 \e[0m \
+    Please check the env.yml file and update the conda env manually by 'conda env update -n $1 -f $_WS_ROOT/$1/env.yml', \
+    and run 'rebase $1 force' to establish the correct overlay" 
+    && echo -e "\e[33m All works done except 'rebase $1 force' \e[0m" 
+    && return 1
     
     # p3: force rebuild rebase
     rebase $1 force
+    echo -e "\e[32m Successfully start workspace $1 \e[0m"
 }
 
 
@@ -89,11 +105,14 @@ function finish() {
         return 1
     fi
     
-    # p3: deactivate conda env or change to base
-    conda deactivate
+    # p3: deactivate conda env
+    while [[ "$CONDA_PREFIX" != "" ]]; do
+        conda deactivate
+    done
 
     # p4: rebase workspace ros
     rebase $_ROS
+    echo -e "\e[32m Successfully finished workspace $1 \e[0m"
 }
 
 

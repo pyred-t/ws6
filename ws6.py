@@ -11,8 +11,13 @@ import tempfile
 import datetime
 
 _CONFIG_PATH = 'config.cfg.sh'
-
 configs = {}
+
+# error code
+# 1: usual error
+# 2: in finish_p2, user abort the push
+# 11: in validate_workspace, reserved workspace name
+
 
 def read_config():
     """
@@ -47,17 +52,26 @@ def read_config():
     finally:
         os.remove(tmpfile)
 
-def _sourcebash_path(workspace:str) -> str:
+
+def _sourcebash_path(workspace: str) -> str:
     return f'{configs["_WS_ROOT"]}/{workspace}/devel/setup.bash'
 
-def _gen_branch_name(workspace:str) -> str:
+
+def _gen_branch_name(workspace: str) -> str:
     return f'{configs["_DEVELOPMENT"]}-{workspace}-{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}'
 
-def _repo_master(repo_name:str) -> str:
+
+def _repo_master(repo_name: str) -> str:
     return configs[f'_{repo_name}_MASTER'] if f'_{repo_name}_MASTER' in configs else 'master'
 
-def _repo_remote_master(repo_name:str) -> str:
+
+def _repo_remote_master(repo_name: str) -> str:
     return configs[f'_{repo_name}_REMOTE_MASTER'] if f'_{repo_name}_REMOTE_MASTER' in configs else 'master'
+
+
+def _get_reserved_workspaces() -> list:
+    return [configs['_ROS'], configs['_WPB'], 'base']
+
 
 # List[Pathlib.Path]
 def _reset_wpb(repo_paths:list = None):
@@ -72,7 +86,7 @@ def _reset_wpb(repo_paths:list = None):
             branch_name = result.stdout.splitlines()[0]
             subprocess.run(['git', 'checkout', f'{_repo_master(repo_name)}'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
             subprocess.run(['git', 'reset', '--hard', f'origin/{_repo_remote_master(repo_name)}'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
-            subprocess.run(['git', 'branch', '-D', result.stdout], cwd=repo_path, check=True, stderr=subprocess.STDOUT) if branch_name != _repo_master(repo_name) else None
+            subprocess.run(['git', 'branch', '-D', branch_name], cwd=repo_path, check=True, stderr=subprocess.STDOUT) if branch_name != _repo_master(repo_name) else None
             logging.info(f'Reset the repository {repo_path}')
         except subprocess.CalledProcessError as e:
             logging.error(f'\033[31m Error in reset {repo_path}: {e.stderr}, skip this repo \033[0m')
@@ -109,8 +123,10 @@ def _check_workspace(workspace:str, to_create:bool=False):
     ws = pathlib.Path(configs['_WS_ROOT']).joinpath(workspace)
     if not ws.exists():
         if to_create:
+            if workspace in _get_reserved_workspaces():
+                logging.error(f'\033[31m {workspace} is a reserved workspace name \033[0m')
+                sys.exit(1)
             ws.joinpath('src').mkdir(parents=True, exist_ok=True)
-            subprocess.run(['catkin_make'], cwd=ws, check=True)
             ws.joinpath('external').mkdir(parents=True, exist_ok=True)
             logging.info(f'Workspace {workspace} created')
             return
@@ -124,9 +140,9 @@ def _check_workspace(workspace:str, to_create:bool=False):
 @main.command()
 @click.argument('workspace')
 def validate_workspace(workspace:str):
-    if workspace == configs['_ROS'] or workspace == configs['_WPB']:
+    if workspace in _get_reserved_workspaces():
         logging.error(f'\033[31m {workspace} is a reserved workspace name \033[0m')
-        sys.exit(1)
+        sys.exit(11)
     _check_workspace(workspace)
 
 
@@ -171,18 +187,22 @@ def start_p1(workspace:str):
     subprocess.run(['rsync', '-a', f'{tmpdir.name}/', f'{ws}/'], check=True, stderr=subprocess.STDOUT)
 
     # apply the patch
+    wpb_repo_paths = [pathlib.Path(root) for root, dirs, _ in os.walk(wpb_ws.joinpath('src')) if '.git' in dirs]
     patch_path = ws.joinpath('external', 'patches')
-    for rel_to_src in patch_path.iterdir():
-        repo_path = wpb_ws.joinpath('src', rel_to_src)
-        if repo_path not in wpb_repo_paths:
-            logging.warning(f'\033[33m repo {repo_path} does not exist \033[0m')
-            continue
-        patch_file = rel_to_src.joinpath(configs['_PATCH_NAME'])
-        if not patch_file.exists():
-            logging.warning(f'\033[33m patch file {patch_file} does not exist \033[0m')
-            continue
-        subprocess.run(['git', 'am', patch_file], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
-        logging.info(f'Patch applied to {repo_path}')
+    if not patch_path.exists():
+        logging.info(f'No patch file found in {patch_path}')
+    else:
+        for rel_to_src in patch_path.iterdir():
+            repo_path = wpb_ws.joinpath('src', rel_to_src)
+            if repo_path not in wpb_repo_paths:
+                logging.warning(f'\033[33m repo {repo_path} does not exist \033[0m')
+                continue
+            patch_file = rel_to_src.joinpath(configs['_PATCH_NAME'])
+            if not patch_file.exists():
+                logging.warning(f'\033[33m patch file {patch_file} does not exist \033[0m')
+                continue
+            subprocess.run(['git', 'am', patch_file], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
+            logging.info(f'Patch applied to {repo_path}')
     
     # create a new branch
     try:
@@ -201,7 +221,8 @@ def start_p1(workspace:str):
     _check_gitignore(workspace)
 
     logging.info(f'\033[32m Finish repo workflow.\033[0m \n '
-                '\t\033[33m You may check user.name and user.email in each repo or global. now\033[0m')
+                '\t\033[33m You may check user.name and user.email in each repo or global now\033[0m')
+
 
 @main.command()
 @click.argument('workspace')
@@ -270,13 +291,13 @@ def finish_p2(workspace:str, done_all_yes:bool=False):
     check_uncommited_changes(ws)
     result = subprocess.run(['git', 'branch', '--show-current'], cwd=ws, check=True, capture_output=True, text=True)
     branch_name = result.stdout.splitlines()[0]
-    # git upstream name
-    upstream = subprocess.run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], cwd=ws, capture_output=True)
+    # get git upstream name
+    upstream = subprocess.run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], cwd=ws, capture_output=True, text=True)
     if upstream.returncode:
         logging.warning(f'\033[33m Error in getting upstream branch: {upstream.stderr} \033[0m')
         upstream = ''
     else:
-        upstream = upstream.stdout.strip()
+        upstream = upstream.stdout.splitlines()[0]
     
     if upstream:
         anystr = input(f'will push {branch_name} to {upstream}, input "yes" to continue, or input "no" to abort: ')
