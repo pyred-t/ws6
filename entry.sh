@@ -34,10 +34,16 @@ function rebase() {
     echo -e "\e[32m Successfully rebase workspace $1 \e[0m"
 }
 
-
+# $1 is the workspace name
 function start() {
+    $_WS6_PY validate-workspace $1
+    [ $? -ne 0 ] && echo "Error validate workspace $1" && return 1
+
+    rebase $_ROS    # must rebase ros first to enable catkin
+    
     # p1: check or create workspace, clone git repo, apply patch
-    $_WS6_PY start_p1 $1
+    $_WS6_PY start-p1 $1
+    [ $? -ne 0 ] && echo -e "\e[31m Error start workspace $1 \e[0m" && return 1
 
     # p2: activate/create conda env (conda name forced to be same as workspace name) and update environemt by env.yml
     conda_env_list=`conda env list | awk '{print $1}'`
@@ -92,9 +98,9 @@ function finish() {
 
 
 # function delete() {
-#     ret = `$_WS6_PY check-workspace $1`
-#     if [ -n $ret ]; then
-#         echo "Error check workspace $1, err: $ret"
+#     $_WS6_PY validate-workspace $1
+#     if [ $? -ne 0 ]; then
+#         echo "Error validate workspace $1"
 #         return 1
 #     fi
 
@@ -121,9 +127,6 @@ function main() {
             ;;
         "finish")
             finish $2 $3
-            ;;
-        "delete")
-            delete $2
             ;;
         *)
             echo "Usage: $0 {rebase|start|finish|delete} {workspace_name}"

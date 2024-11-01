@@ -28,8 +28,11 @@ def read_config():
                 file2.write(line + '\n')
                 line = line.strip()
                 if line and not line.startswith('#'):  # skip comments and empty lines
-                    key, value = line.split('=', 1)
-                    keys.append(key.strip())
+                    try:
+                        key, value = line.split('=', 1)
+                        keys.append(key.strip())
+                    except ValueError:
+                        logging.warning(f'Line "{line}" is not a valid key-value pair')
             for key in keys:
                 file2.write(f'echo ${key}\n')   # echo the value of the variables
             
@@ -48,7 +51,7 @@ def _sourcebash_path(workspace:str) -> str:
     return f'{configs["_WS_ROOT"]}/{workspace}/devel/setup.bash'
 
 def _gen_branch_name(workspace:str) -> str:
-    return f'{configs["_DEVELOPMENT"]}_{workspace}_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}'
+    return f'{configs["_DEVELOPMENT"]}-{workspace}-{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}'
 
 def _repo_master(repo_name:str) -> str:
     return configs[f'_{repo_name}_MASTER'] if f'_{repo_name}_MASTER' in configs else 'master'
@@ -60,12 +63,13 @@ def _repo_remote_master(repo_name:str) -> str:
 def _reset_wpb(repo_paths:list = None):
     subprocess.run(['git', 'config', '--unset', '--global', 'user.name'])
     subprocess.run(['git', 'config', '--unset', '--global', 'user.email'])
+    wpb_ws = pathlib.Path(configs['_WS_ROOT']).joinpath(configs['_WPB'])
     repo_paths = [pathlib.Path(root) for root, dirs, _ in os.walk(wpb_ws.joinpath('src')) if '.git' in dirs] if repo_paths is None else repo_paths
     for repo_path in repo_paths:
         repo_name = repo_path.name
         try:
             result = subprocess.run(['git', 'branch', '--show-current'], cwd=repo_path, check=True, capture_output=True, text=True)
-            branch_name = result.stdout.strip()
+            branch_name = result.stdout.splitlines()[0]
             subprocess.run(['git', 'checkout', f'{_repo_master(repo_name)}'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
             subprocess.run(['git', 'reset', '--hard', f'origin/{_repo_remote_master(repo_name)}'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
             subprocess.run(['git', 'branch', '-D', result.stdout], cwd=repo_path, check=True, stderr=subprocess.STDOUT) if branch_name != _repo_master(repo_name) else None
@@ -74,6 +78,25 @@ def _reset_wpb(repo_paths:list = None):
             logging.error(f'\033[31m Error in reset {repo_path}: {e.stderr}, skip this repo \033[0m')
     logging.info(f'\033[32m Reset the repositories in {configs["_WPB"]} \033[0m')
 
+
+def _check_gitignore(workspace:str):
+    ws = pathlib.Path(configs['_WS_ROOT']).joinpath(workspace)
+    gitignore = ws.joinpath('.gitignore')
+    # if exists, check /build and /devel and /install and .catkin_workspace are in the gitignore
+    # if not exists, create one with /build and /devel and /install and .catkin_workspace
+    check_list = ['build', 'devel', 'install', '.catkin_workspace']
+    if not gitignore.exists():
+        with gitignore.open('w') as file:
+            for item in check_list:
+                file.write(f'/{item}\n')
+        logging.info(f'Created .gitignore in {ws}')
+    else:
+        with gitignore.open('r') as file:
+            lines = file.readlines()
+            for item in check_list:
+                if f'/{item}\n' not in lines:
+                    logging.warning(f'\033[33m /{item} is not in the .gitignore in {ws} \033[0m')
+            logging.info(f'Checked .gitignore in {ws}')
 
 @click.group()
 def main():
@@ -139,8 +162,8 @@ def start_p1(workspace:str):
 
     # try reset wpb_ws
     _reset_wpb()
-
     
+    # clone the repository
     httpurl = input('Please input the http(s)url of the repository: ')
     branch = input('Please input the branch name(or press enter, default main): ') or 'main'
     tmpdir = tempfile.TemporaryDirectory()
@@ -174,6 +197,9 @@ def start_p1(workspace:str):
     except:
         logging.error(f'\033[31m Error in creating a new branch, skip those \033[0m')
     
+    # check or create .gitignore
+    _check_gitignore(workspace)
+
     logging.info(f'\033[32m Finish repo workflow.\033[0m \n '
                 '\t\033[33m You may check user.name and user.email in each repo or global. now\033[0m')
 
@@ -243,7 +269,7 @@ def finish_p2(workspace:str, done_all_yes:bool=False):
     # push the changes
     check_uncommited_changes(ws)
     result = subprocess.run(['git', 'branch', '--show-current'], cwd=ws, check=True, capture_output=True, text=True)
-    branch_name = result.stdout.strip()
+    branch_name = result.stdout.splitlines()[0]
     # git upstream name
     upstream = subprocess.run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], cwd=ws, capture_output=True)
     if upstream.returncode:
