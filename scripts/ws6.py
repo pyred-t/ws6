@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-import logging
 import click
-
+import datetime
+import logging
 import os
 import pathlib
 import shutil
 import subprocess
 import sys
 import tempfile
-import datetime
 
 _CONFIG_PATH = '../config.cfg.sh'
 configs = {}
@@ -346,7 +345,5 @@ if __name__ == '__main__':
     logging.basicConfig(format='\033[34m [WS6] %(levelname)s\033[0m: %(message)s', level=logging.INFO)
     _CONFIG_PATH = pathlib.Path(__file__).parent.joinpath(_CONFIG_PATH)
     read_config()
-    print(configs)
-
     # print(configs)
     main()
