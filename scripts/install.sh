@@ -42,9 +42,9 @@ if [ -z "$(grep "ws6: update bashrc" ~/.bashrc)" ]; then
     echo "# >>> ws6: update bashrc >>>" >> ~/.bashrc
 fi
 
-# if [ -z "$(grep WS6_HOME ~/.bashrc)" ]; then
-#     echo "export WS6_HOME=\"$WS6_HOME\"" >> ~/.bashrc
-# fi
+ if [ -z "$(grep WS6_HOME ~/.bashrc)" ]; then
+     echo "export WS6_HOME=\"$WS6_HOME\"" >> ~/.bashrc
+ fi
 
 # alias ws6 = `source entry.sh`
 if [ -z "$(grep "alias ws6=" ~/.bashrc)" ]; then
