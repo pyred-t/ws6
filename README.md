@@ -1,5 +1,7 @@
 # ws6
-for ros workspace management associate with wpb
+for ros workspace management associated with wpb
+![image](https://github.com/user-attachments/assets/45a724dc-9529-421a-bf37-e2143597b898)
+
 ## Usage
 ### 环境需求
 
