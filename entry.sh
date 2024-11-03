@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source config.cfg.sh
+source "$WS6_HOME/config.cfg.sh"
 
 # Rebase the workspace to establish the correct overlay. 
 # $1 is the workspace name, and $2 (if provided) indicates a forced rebuild.
@@ -10,24 +10,30 @@ function rebase() {
     $_WS6_PY prepare-list $1 && source $_SOURCE_LIST
     if [ $? -ne 0 ]; then echo -e "\e[31m Error check workspace $1 \e[0m"; return 1; fi
     if [[ "$1" == "$_ROS" ]]; then
+        while [[ "$CONDA_PREFIX" != "" ]]; do
+            conda deactivate
+        done
         echo -e "\e[32m Successfully rebase workspace $1 \e[0m"
         return 0
     fi
     # the following section may rebuild the target workspace to establish the correct overlay
     pkg_count=$(echo "$ROS_PACKAGE_PATH" | awk -F':' '{print NF}')
     echo -e "\e[34m ROS_PACKAGE_PATH contains $pkg_count packages \e[0m"
-    if [[ "$1" == "$_WPB" || -n "$2" ]]; then
-        if [ $pkg_count -ne 2 ]; then
+    if [[ "$1" == "$_WPB" ]]; then
+        if [[ $pkg_count -ne 2 || -n "$2" ]]; then
             rebase $_ROS                                                        # Check carefully: recursive call
-            pushd $_WS_ROOT/$_WPB && rm -rf devel build && catkin_make && popd
-            [ $? -ne 0 ] && echo -e "\e[31m Error rebuild $_WPB \e[0m" && return 1
+            pushd $_WS_ROOT/$_WPB && rm -rf devel build && catkin_make 
+            [ $? -ne 0 ] && echo -e "\e[31m Error rebuild $_WPB \e[0m" && popd && return 1
+            popd
             $_WS6_PY prepare-list $_WPB && source $_SOURCE_LIST
         fi
     else
         if [[ $pkg_count -ne 3 || -n "$2" ]]; then
             rebase $_WPB $2                                                     # Check carefully: recursive call
-            pushd $_WS_ROOT/$1 && rm -rf devel build && catkin_make && popd
-            [ $? -ne 0 ] && echo -e "\e[31m Error rebuild $1 \e[0m" && return 1
+            [ $? -ne 0 ] && echo -e "\e[31m Error rebase $_WPB \e[0m" && return 1
+            pushd $_WS_ROOT/$1 && rm -rf devel build && catkin_make
+            [ $? -ne 0 ] && echo -e "\e[31m Error rebuild $1 \e[0m" && popd && return 1
+            popd
             $_WS6_PY prepare-list $1 && source $_SOURCE_LIST
         fi
     fi
@@ -38,7 +44,8 @@ function rebase() {
 function start() {
     to_create=0
     $_WS6_PY validate-workspace $1
-    if [ $? -ne 0 ] && [ $? -ne 11 ]; then
+    ret=$?
+    if [ $ret -ne 0 ] && [ $ret -ne 11 ]; then
         to_create=1
     fi
     
@@ -56,7 +63,7 @@ function start() {
     # p2: activate/create conda env (conda name forced to be same as workspace name) and update environemt by env.yml
     conda_env_list=`conda env list | awk '{print $1}'`
     if [[ $conda_env_list =~ $1 ]]; then
-        echo "\e[32m Use Conda env $1 \e[0m"
+        echo -e "\e[32m Use Conda env $1 \e[0m"
     else
         read -p "Enter the Python version for the conda environment (default is $_DEFAULT_PYTHON_VERSION): " python_version
         python_version=${python_version:-$_DEFAULT_PYTHON_VERSION}
@@ -69,15 +76,20 @@ function start() {
     [ $? -ne 0 ] && echo -e "\e[31m Error create conda env $1 \e[0m" && return 1
     # conda env update by env.yml
     conda activate $1
-    [ -f $_WS_ROOT/$1/env.yml ] && conda env update -n $1 -f $_WS_ROOT/$1/env.yml
-    [ $? -ne 0 ] && echo -e "\e[31m Error update conda env $1 \e[0m \
-    Please check the env.yml file and update the conda env manually by 'conda env update -n $1 -f $_WS_ROOT/$1/env.yml', \
-    and run 'rebase $1 force' to establish the correct overlay" 
-    && echo -e "\e[33m All works done except 'rebase $1 force' \e[0m" 
-    && return 1
+    if [ -f $_WS_ROOT/$1/env.yml ]; then
+        conda env update -n $1 -f $_WS_ROOT/$1/env.yml
+        if [ $? -ne 0 ]; then
+            echo -e "\e[31m Error update conda env $1 \e[0m"
+            echo -e "Please check the env.yml file and update the conda env manually by 'conda env update -n $1 -f $_WS_ROOT/$1/env.yml',"
+            echo -e "and run 'rebase $1 force' to establish the correct overlay"
+            echo -e "\e[33m All works done except 'rebase $1 force' \e[0m"
+            return 1
+        fi
+    fi
     
     # p3: force rebuild rebase
     rebase $1 force
+    [ $? -ne 0 ] && echo -e "\e[31m Error rebase $1 \e[0m" && return 1
     echo -e "\e[32m Successfully start workspace $1 \e[0m"
 }
 
@@ -98,9 +110,11 @@ function finish() {
 
     # p2: git things
     $_WS6_PY finish-p2 $1 $2
-    if [ $? -eq 2 ]; then
+    ret=$?
+    if [ $ret -eq 2 ]; then
         echo -e "\e[32m Successfully finished workspace without done-all $1 \e[0m"
-    elif [ $? -ne 0 ]; then
+        return 0
+    elif [ $ret -ne 0 ]; then
         echo -e "\e[31m Terminate work on finishing workspace $1 \e[0m"
         return 1
     fi

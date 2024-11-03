@@ -10,7 +10,7 @@ import sys
 import tempfile
 import datetime
 
-_CONFIG_PATH = 'config.cfg.sh'
+_CONFIG_PATH = '../config.cfg.sh'
 configs = {}
 
 # error code
@@ -37,7 +37,7 @@ def read_config():
                         key, value = line.split('=', 1)
                         keys.append(key.strip())
                     except ValueError:
-                        logging.warning(f'Line "{line}" is not a valid key-value pair')
+                        pass
             for key in keys:
                 file2.write(f'echo ${key}\n')   # echo the value of the variables
             
@@ -86,6 +86,7 @@ def _reset_wpb(repo_paths:list = None):
             branch_name = result.stdout.splitlines()[0]
             subprocess.run(['git', 'checkout', f'{_repo_master(repo_name)}'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
             subprocess.run(['git', 'reset', '--hard', f'origin/{_repo_remote_master(repo_name)}'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
+            subprocess.run(['git', 'clean', '-fd'], cwd=repo_path, check=True, stderr=subprocess.STDOUT)
             subprocess.run(['git', 'branch', '-D', branch_name], cwd=repo_path, check=True, stderr=subprocess.STDOUT) if branch_name != _repo_master(repo_name) else None
             logging.info(f'Reset the repository {repo_path}')
         except subprocess.CalledProcessError as e:
@@ -159,8 +160,14 @@ def prepare_list(workspace:str):
             return
         file.write(f'source {_sourcebash_path(configs["_WPB"])}\n')
         if workspace == configs['_WPB']:
+            file.write(f'conda activate {configs["_CURRENT_CONDA_ENV"]}\n') if configs['_CURRENT_CONDA_ENV'] else None
+            logging.warning(f'\033[33m Current conda environment is {configs["_CURRENT_CONDA_ENV"]} \033[0m')
             return
         file.write(f'source {_sourcebash_path(workspace)}\n')
+        file.write(f'conda activate {workspace} \n')
+        if configs['_CURRENT_CONDA_ENV'] and workspace != configs['_CURRENT_CONDA_ENV']:
+            logging.warning(f'\033[33m Current conda environment is {configs["_CURRENT_CONDA_ENV"]}, not the same as {workspace} \033[0m')
+            logging.warning(f'\033[33m We will force activate {workspace} instead even if {workspace} is not exist  \033[0m')
     logging.info(f'Prepared source list for {workspace}')
 
 
@@ -178,6 +185,8 @@ def start_p1(workspace:str):
 
     # try reset wpb_ws
     _reset_wpb()
+    subprocess.run(['rm', '-rf', ws.joinpath('external', 'patches')], check=True)
+    subprocess.run(['rm', '-rf', ws.joinpath('external', 'diffs_read_only')], check=True)
     
     # clone the repository
     httpurl = input('Please input the http(s)url of the repository: ')
@@ -185,6 +194,10 @@ def start_p1(workspace:str):
     tmpdir = tempfile.TemporaryDirectory()
     subprocess.run(['git', 'clone', '-b' , branch, httpurl, tmpdir.name], check=True, stderr=subprocess.STDOUT)
     subprocess.run(['rsync', '-a', f'{tmpdir.name}/', f'{ws}/'], check=True, stderr=subprocess.STDOUT)
+    user_name = input('Please input the global user.name: ')
+    user_email = input('Please input the global user.email: ')
+    subprocess.run(['git', 'config', '--global', 'user.name', user_name])
+    subprocess.run(['git', 'config', '--global', 'user.email', user_email])
 
     # apply the patch
     wpb_repo_paths = [pathlib.Path(root) for root, dirs, _ in os.walk(wpb_ws.joinpath('src')) if '.git' in dirs]
@@ -192,12 +205,13 @@ def start_p1(workspace:str):
     if not patch_path.exists():
         logging.info(f'No patch file found in {patch_path}')
     else:
-        for rel_to_src in patch_path.iterdir():
+        for patch in patch_path.iterdir():
+            rel_to_src = patch.relative_to(patch_path)
             repo_path = wpb_ws.joinpath('src', rel_to_src)
             if repo_path not in wpb_repo_paths:
                 logging.warning(f'\033[33m repo {repo_path} does not exist \033[0m')
                 continue
-            patch_file = rel_to_src.joinpath(configs['_PATCH_NAME'])
+            patch_file = patch.joinpath(configs['_PATCH_NAME'])
             if not patch_file.exists():
                 logging.warning(f'\033[33m patch file {patch_file} does not exist \033[0m')
                 continue
@@ -284,11 +298,12 @@ def finish_p2(workspace:str, done_all_yes:bool=False):
         sys.exit(2)
     
     # Try auto commit the patch files, error msg redirect to null
-    subprocess.run(['git', 'add', 'external/patches/'], cwd=ws, stderr=subprocess.DEVNULL)
+    for to_commit in ['.gitignore', 'env.yml', 'external/patches/', 'external/diffs_read_only/']:
+        ret = subprocess.run(['git', 'add', to_commit], cwd=ws, stderr=subprocess.DEVNULL)
     subprocess.run(['git', 'commit', '-m', f'Add patches for {workspace}'], cwd=ws, stderr=subprocess.DEVNULL)
     
     # push the changes
-    check_uncommited_changes(ws)
+    check_uncommitted_changes(ws)
     result = subprocess.run(['git', 'branch', '--show-current'], cwd=ws, check=True, capture_output=True, text=True)
     branch_name = result.stdout.splitlines()[0]
     # get git upstream name
@@ -300,15 +315,16 @@ def finish_p2(workspace:str, done_all_yes:bool=False):
         upstream = upstream.stdout.splitlines()[0]
     
     if upstream:
-        anystr = input(f'will push {branch_name} to {upstream}, input "yes" to continue, or input "no" to abort: ')
-        if anystr != 'yes' or anystr != 'y':
+        anystr = input(f'will push {branch_name} to {upstream}, input "yes/y" to continue, any other input to abort: ')
+        if anystr != 'yes' and anystr != 'y':
             logging.info(f'\033[33m Finish the repo workflow without pushing the changes \033[0m')
             sys.exit(2)
         else:
-            subprocess.run(['git', 'push'], cwd=ws, check=True, stderr=subprocess.STDOUT)
+            upstream = upstream.split('/')[-1]
+            subprocess.run(['git', 'push', 'origin', f'HEAD:{upstream}'], cwd=ws, check=True, stderr=subprocess.STDOUT)
     else:
-        anystr = input(f'no upstream branch found, will push {branch_name} to origin, input "yes" to continue, or input "no" to abort: ')
-        if anystr != 'yes' or anystr != 'y':
+        anystr = input(f'no upstream branch found, will push {branch_name} to origin, input "yes/y" to continue, any other input to abort: ')
+        if anystr != 'yes' and anystr != 'y':
             logging.info(f'\033[33m Finish the repo workflow without pushing the changes \033[0m')
             sys.exit(2)
         else:
@@ -323,10 +339,14 @@ def finish_p2(workspace:str, done_all_yes:bool=False):
     # reset the wpb_ws
     _reset_wpb(repo_paths)
 
-    logging.info(f'\033[32m Finish repo workflow. You may delete {"{workspace}"}/src manually now. \033[0m')
+    logging.info(f'\033[32m Finish repo workflow. \033[0m You may delete {workspace}/src manually now.')
 
 
 if __name__ == '__main__':
     logging.basicConfig(format='\033[34m [WS6] %(levelname)s\033[0m: %(message)s', level=logging.INFO)
+    _CONFIG_PATH = pathlib.Path(__file__).parent.joinpath(_CONFIG_PATH)
     read_config()
+    print(configs)
+
+    # print(configs)
     main()

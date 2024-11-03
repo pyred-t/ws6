@@ -1,9 +1,54 @@
 # ws6
-for ros workspace management
+for ros workspace management associate with wpb
+## Usage
+### 环境需求
 
----
+1. conda
+2. python click
+
+### Install
+
+```bash
+git clone this-repo.git
+cd ws6 && ./scripts/install.sh
+source ~/.bashrc
+```
+
+### 流程
+0. 准备一个 git 项目仓库
+
+1. 开始/继续一个新的工作区
+
+```bash
+ws6 start {workspace_name}
+```
+将会创建/定位到对应工作区目录，从 git 中拉取代码，将 pach 文件应用到 wpb 中，自动创建一个新分支`{dev}-{ws}-{time}`；并创建/激活(按 env.yml ) conda 环境，重新编译工作区
+
+如果在编译中失败了，解决问题后使用 `rebase {workspace} y` 重新编译即可
+
+2. 结束当前开发
+
+```bash
+ws6 finish {workspace_name}
+ws6 finish {workspace_name} y
+```
+将会生成 conda 环境依赖到工作目录下 env.yml， 将 wpb 所有改动打包至工作目录下的 external 目录下
+
+如果设置了 y 参数 (done-all-yes)，将会执行提交代码的操作，成功后删除工作目录 .git/ 元信息，rebase 至 noetic
+
+3. optional: rebase
+```bash
+ws6 rebase {workspace}
+ws6 rebase {workspace} y
+```
+定位至目标工作目录，构建 overlay (即 workspace-wpb-noetic)，如果设置了 y 参数 (force)，将会执行重新编译操作。
+
+### 配置
+相关配置在 config.cfg.sh 目录下，主要针对路径等。
+
+
+## 思路
 使用点命令(. or source)执行脚本，以使得环境变量在本终端生效
-
 
 ---
 Use `PS1` to show \$ros_package_path, *e.g. m@LAPTOP[wpb_ws;noetic]:~/s6$*

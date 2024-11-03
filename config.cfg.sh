@@ -1,11 +1,15 @@
-# Tool Paths and directories
-_DEVELOPMENT="onboard"
-_WS6_PY="./ws6.py"
-_CACHE_DIR="."  # _CACHE_DIR="/var/cache/ws6"
+_DEVELOPMENT="simulation"
+# Do not change. Tool Paths and directories
+WS6_HOME="/home/m/s6"
+_SCRIPTS_DIR="$WS6_HOME/scripts"
+_CACHE_DIR="$WS6_HOME/.etc"
+_WS6_PY="$_SCRIPTS_DIR/ws6.py"
 _SOURCE_LIST="$_CACHE_DIR/source.list.sh"
 
-# conda env
-_CURRENT_CONDA_ENV=$(conda info --envs | grep "*" | awk '{print $1}')
+# Do not change. conda env, auto detect
+if [ -n "$CONDA_PREFIX" ]; then
+    _CURRENT_CONDA_ENV=$(basename $CONDA_PREFIX)
+fi
 
 # Workspace and ROS configuration
 _WS_ROOT="/home/$(whoami)/ws"
