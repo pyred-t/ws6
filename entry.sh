@@ -6,6 +6,15 @@ source "$WS6_HOME/config.cfg.sh"
 # $1 is the workspace name, and $2 (if provided) indicates a forced rebuild.
 # Mind: never use conda env to pollute base ros workspace
 function rebase() {
+    if [ -z "$1" ]; then
+        help
+        return 1
+    fi
+    if [ -n "$2" ] && [ "$2" != "force" ]; then
+        help
+        return 1
+    fi
+
     unset ROS_PACKAGE_PATH
     $_WS6_PY prepare-list $1 && source $_SOURCE_LIST
     if [ $? -ne 0 ]; then echo -e "\e[31m Error check workspace $1 \e[0m"; return 1; fi
@@ -95,8 +104,22 @@ function start() {
 
 
 # $1 is the workspace name, 
-# and $2 (if provided, “1”, “true”, “t”, “yes”, “y”) indicates do all finish steps including delete git repo metadata
+# and $2 (done-all) indicates do all finish steps including delete git repo metadata
 function finish() {
+    if [ -z "$1" ]; then
+        help
+        return 1
+    fi
+    if [ -n "$2" ]; then
+        if [ "$2" != "done-all" ]; then
+            help
+            return 1
+        else
+            done_all=y
+        fi
+    fi
+
+
     $_WS6_PY validate-workspace $1
     if [ $? -ne 0 ]; then
         echo "Error validate workspace $1"
@@ -162,9 +185,18 @@ function main() {
             finish $2 $3
             ;;
         *)
-            echo "Usage: $0 {rebase|start|finish|delete} {workspace_name}"
+            help
             exit 1
     esac
+}
+
+function help() {
+    echo "Usage: $0 start {workspace_name}"
+    echo "Usage: $0 rebase {workspace_name} [force]"
+    echo "Usage: $0 finish {workspace_name} [done-all]"
+    echo "rebase: rebase the workspace to establish the correct overlay, if force is provided, rebuild the workspace"
+    echo "start: start the workspace, pull git repo, activate conda env and apply patch"
+    echo "finish: finish the workspace, export changes, if done-all is provided, delete git repo metadata"
 }
 
 main $@
