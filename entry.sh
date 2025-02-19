@@ -186,14 +186,14 @@ function main() {
             ;;
         *)
             help
-            exit 1
+            return 1
     esac
 }
 
 function help() {
-    echo "Usage: $0 start {workspace_name}"
-    echo "Usage: $0 rebase {workspace_name} [force]"
-    echo "Usage: $0 finish {workspace_name} [done-all]"
+    echo "Usage: ws6 start {workspace_name}"
+    echo "Usage: ws6 rebase {workspace_name} [force]"
+    echo "Usage: ws6 finish {workspace_name} [done-all]"
     echo "rebase: rebase the workspace to establish the correct overlay, if force is provided, rebuild the workspace"
     echo "start: start the workspace, pull git repo, activate conda env and apply patch"
     echo "finish: finish the workspace, export changes, if done-all is provided, delete git repo metadata"

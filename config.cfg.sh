@@ -17,7 +17,7 @@ _ROS="noetic"
 _WPB="wpb_ws"
 
 # Python configuration
-_REQUIRED_PYTHON_PACKAGES_BY_CONDA="rosdep empy click"
+_REQUIRED_PYTHON_PACKAGES_BY_CONDA="rosdep empy click numpy"
 _REQUIRED_PYTHON_PACKAGES_BY_PIP="catkin-tools"
 _DEFAULT_PYTHON_VERSION="3.8"
 
